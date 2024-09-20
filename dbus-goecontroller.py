@@ -47,10 +47,12 @@ class DbusGoeControllerService:
     self._dbusservice.add_path('/DeviceInstance', deviceinstance)
     self._dbusservice.add_path('/ProductId', 0xFFFF) # 
     self._dbusservice.add_path('/ProductName', productname)
-    self._dbusservice.add_path('/CustomName', productname)
     if data:
-       self._dbusservice.add_path('/FirmwareVersion', data['fwv'])
-       self._dbusservice.add_path('/Serial', data['sse'])
+      self._dbusservice.add_path('/FirmwareVersion', data['fwv'])
+      self._dbusservice.add_path('/Serial', data['sse'])
+      self._dbusservice.add_path('/CustomName', data['fna'])
+    else:
+      self._dbusservice.add_path('/CustomName', productname)
     self._dbusservice.add_path('/Connected', 1)
     self._dbusservice.add_path('/UpdateIndex', 0)
     
@@ -96,7 +98,7 @@ class DbusGoeControllerService:
     accessType = config['DEFAULT']['AccessType']
     
     if accessType == 'OnPremise': 
-        URL = "http://%s/api/status?filter=sse,ccn,ccp,cpc,cec,usv,fwv" % (config['ONPREMISE']['Host'])
+        URL = "http://%s/api/status?filter=sse,fna,ccn,ccp,cpc,cec,usv,fwv" % (config['ONPREMISE']['Host'])
     else:
         raise ValueError("AccessType %s is not supported" % (config['DEFAULT']['AccessType']))
     
@@ -168,13 +170,25 @@ class DbusGoeControllerService:
        data = self._getGoeControllerData()
        
        if data is not None:
-          #send data to DBush
+          #send data to DBus
           grid_category_index = 1
-          self._dbusservice['/Ac/L1/Current'] = data['cpc'][grid_category_index][0]
-          self._dbusservice['/Ac/L2/Current'] = data['cpc'][grid_category_index][1]
-          self._dbusservice['/Ac/L3/Current'] = data['cpc'][grid_category_index][2]
 
-          self._dbusservice['/Ac/Power'] = data['ccp'][grid_category_index]
+          current_l1 = data['cpc'][grid_category_index][0]
+          current_l2 = data['cpc'][grid_category_index][1]
+          current_l3 = data['cpc'][grid_category_index][2]
+
+          self._dbusservice['/Ac/L1/Current'] = current_l1
+          self._dbusservice['/Ac/L2/Current'] = current_l2
+          self._dbusservice['/Ac/L3/Current'] = current_l3
+
+          sum_power = data['ccp'][grid_category_index]
+          current_sum = current_l1 + current_l2 + current_l3
+
+          self._dbusservice['/Ac/L1/Power'] = current_l1 / current_sum * sum_power
+          self._dbusservice['/Ac/L2/Power'] = current_l2 / current_sum * sum_power
+          self._dbusservice['/Ac/L3/Power'] = current_l3 / current_sum * sum_power
+
+          self._dbusservice['/Ac/Power'] = sum_power
 
           self._dbusservice['/Ac/L1/Voltage'] = data['usv'][0]['u1']
           self._dbusservice['/Ac/L2/Voltage'] = data['usv'][0]['u2']
@@ -252,6 +266,9 @@ def main():
           '/Ac/L1/Current': {'initial': 0, 'textformat': _a},
           '/Ac/L2/Current': {'initial': 0, 'textformat': _a},
           '/Ac/L3/Current': {'initial': 0, 'textformat': _a},
+          '/Ac/L1/Power': {'initial': 0, 'textformat': _w},
+          '/Ac/L2/Power': {'initial': 0, 'textformat': _w},
+          '/Ac/L3/Power': {'initial': 0, 'textformat': _w},
           '/Ac/Power': {'initial': 0, 'textformat': _w},
           '/Ac/L1/Voltage': {'initial': 0, 'textformat': _v},
           '/Ac/L2/Voltage': {'initial': 0, 'textformat': _v},
