@@ -47,14 +47,9 @@ class DbusGoeControllerService:
     self._dbusservice.add_path('/DeviceInstance', deviceinstance)
     self._dbusservice.add_path('/ProductId', 0xFFFF) # 
     self._dbusservice.add_path('/ProductName', productname)
-    self._dbusservice.add_path('/CustomName', productname)    
+    self._dbusservice.add_path('/CustomName', productname)
     if data:
-       fwv = data['fwv']
-       try:
-           fwv = int(data['fwv'].replace('.', ''))
-       except:
-           pass
-       self._dbusservice.add_path('/FirmwareVersion', fwv)
+       self._dbusservice.add_path('/FirmwareVersion', data['fwv'])
        self._dbusservice.add_path('/Serial', data['sse'])
     self._dbusservice.add_path('/Connected', 1)
     self._dbusservice.add_path('/UpdateIndex', 0)
@@ -101,7 +96,7 @@ class DbusGoeControllerService:
     accessType = config['DEFAULT']['AccessType']
     
     if accessType == 'OnPremise': 
-        URL = "http://%s/api/status" % (config['ONPREMISE']['Host'])
+        URL = "http://%s/api/status?filter=sse,ccn,ccp,cpc,cec,usv,fwv" % (config['ONPREMISE']['Host'])
     else:
         raise ValueError("AccessType %s is not supported" % (config['DEFAULT']['AccessType']))
     
@@ -173,47 +168,25 @@ class DbusGoeControllerService:
        data = self._getGoeControllerData()
        
        if data is not None:
-          #send data to DBus
-          self._dbusservice['/Ac/L1/Power'] = int(data['nrg'][7] * 0.1 * 1000)
-          self._dbusservice['/Ac/L2/Power'] = int(data['nrg'][8] * 0.1 * 1000)
-          self._dbusservice['/Ac/L3/Power'] = int(data['nrg'][9] * 0.1 * 1000)
-          self._dbusservice['/Ac/Power'] = int(data['nrg'][11] * 0.01 * 1000)
-          self._dbusservice['/Ac/Voltage'] = int(data['nrg'][0])
-          self._dbusservice['/Current'] = max(data['nrg'][4] * 0.1, data['nrg'][5] * 0.1, data['nrg'][6] * 0.1)
-          self._dbusservice['/Ac/Energy/Forward'] = int(float(data['eto']) / 10.0)
-          
-          self._dbusservice['/StartStop'] = int(data['alw'])
-          self._dbusservice['/SetCurrent'] = int(data['amp'])
-          self._dbusservice['/MaxCurrent'] = int(data['ama']) 
-          
-          # update chargingTime, increment charge time only on active charging (2), reset when no car connected (1)
-          timeDelta = time.time() - self._lastUpdate
-          if int(data['car']) == 2 and self._lastUpdate > 0:  # vehicle loads
-            self._chargingTime += timeDelta
-          elif int(data['car']) == 1:  # charging station ready, no vehicle
-            self._chargingTime = 0
-          self._dbusservice['/ChargingTime'] = int(self._chargingTime)
+          #send data to DBush
+          grid_category_index = 1
+          self._dbusservice['/Ac/L1/Current'] = data['cpc'][grid_category_index][0]
+          self._dbusservice['/Ac/L2/Current'] = data['cpc'][grid_category_index][1]
+          self._dbusservice['/Ac/L3/Current'] = data['cpc'][grid_category_index][2]
 
-          self._dbusservice['/Mode'] = 0  # Manual, no control
-          
-          config = self._getConfig()
-          self._dbusservice['/MCU/Temperature'] = int(data['tma'][0])
+          self._dbusservice['/Ac/Power'] = data['ccp'][grid_category_index]
 
-          # value 'car' 1: charging station ready, no vehicle 2: vehicle loads 3: Waiting for vehicle 4: Charge finished, vehicle still connected
-          status = 0
-          if int(data['car']) == 1:
-            status = 0
-          elif int(data['car']) == 2:
-            status = 2
-          elif int(data['car']) == 3:
-            status = 6
-          elif int(data['car']) == 4:
-            status = 3
-          self._dbusservice['/Status'] = status
+          self._dbusservice['/Ac/L1/Voltage'] = data['usv'][0]['u1']
+          self._dbusservice['/Ac/L2/Voltage'] = data['usv'][0]['u2']
+          self._dbusservice['/Ac/L3/Voltage'] = data['usv'][0]['u3']
+          self._dbusservice['/Ac/N/Voltage'] = data['usv'][0]['uN']
+
+          self._dbusservice['/Ac/Energy/Forward'] = data['cec'][grid_category_index][0] / 1000.
+          self._dbusservice['/Ac/Energy/Backward'] = data['cec'][grid_category_index][1] / 1000.
 
           #logging
-          logging.debug("Wallbox Consumption (/Ac/Power): %s" % (self._dbusservice['/Ac/Power']))
-          logging.debug("Wallbox Forward (/Ac/Energy/Forward): %s" % (self._dbusservice['/Ac/Energy/Forward']))
+          logging.debug("Smartmeter Consumption (/Ac/Power): %s" % (self._dbusservice['/Ac/Power']))
+          logging.debug("Smartmeter Forward (/Ac/Energy/Forward): %s" % (self._dbusservice['/Ac/Energy/Forward']))
           logging.debug("---")
           
           # increment UpdateIndex - to show that new data is available
@@ -274,24 +247,21 @@ def main():
      
       #start our main-service
       pvac_output = DbusGoeControllerService(
-        servicename='com.victronenergy.evcharger',
+        servicename='com.victronenergy.grid',
         paths={
+          '/Ac/L1/Current': {'initial': 0, 'textformat': _a},
+          '/Ac/L2/Current': {'initial': 0, 'textformat': _a},
+          '/Ac/L3/Current': {'initial': 0, 'textformat': _a},
           '/Ac/Power': {'initial': 0, 'textformat': _w},
-          '/Ac/L1/Power': {'initial': 0, 'textformat': _w},
-          '/Ac/L2/Power': {'initial': 0, 'textformat': _w},
-          '/Ac/L3/Power': {'initial': 0, 'textformat': _w},
+          '/Ac/L1/Voltage': {'initial': 0, 'textformat': _v},
+          '/Ac/L2/Voltage': {'initial': 0, 'textformat': _v},
+          '/Ac/L3/Voltage': {'initial': 0, 'textformat': _v},
+          '/Ac/N/Voltage': {'initial': 0, 'textformat': _v},
           '/Ac/Energy/Forward': {'initial': 0, 'textformat': _kwh},
-          '/ChargingTime': {'initial': 0, 'textformat': _s},
-          
-          '/Ac/Voltage': {'initial': 0, 'textformat': _v},
-          '/Current': {'initial': 0, 'textformat': _a},
-          '/SetCurrent': {'initial': 0, 'textformat': _a},
-          '/MaxCurrent': {'initial': 0, 'textformat': _a},
-          '/MCU/Temperature': {'initial': 0, 'textformat': _degC},
-          '/StartStop': {'initial': 0, 'textformat': lambda p, v: (str(v))}
+          '/Ac/Energy/Backward': {'initial': 0, 'textformat': _kwh},
         }
-        )
-     
+      )
+
       logging.info('Connected to dbus, and switching over to gobject.MainLoop() (= event based)')
       mainloop = gobject.MainLoop()
       mainloop.run()
