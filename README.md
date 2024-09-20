@@ -1,4 +1,4 @@
-# dbus-goecharger
+# dbus-goecontroller
 Integrate go-eCharger into Victron Energies Venus OS
 
 ## Purpose
@@ -44,22 +44,22 @@ Control of go-eCharger by the victron system in "Mode" "Auto" is not supported f
 
 ## Install & Configuration
 ### Get the code
-Just grap a copy of the main branche and copy them to a folder under `/data/` e.g. `/data/dbus-goecharger`.
+Just grap a copy of the goecontroller branche and copy them to a folder under `/data/` e.g. `/data/dbus-goecontroller`.
 After that call the install.sh script.
 
 The following script should do everything for you:
 ```
-wget https://github.com/vikt0rm/dbus-goecharger/archive/refs/heads/main.zip
-unzip main.zip "dbus-goecharger-main/*" -d /data
-mv /data/dbus-goecharger-main /data/dbus-goecharger
-chmod a+x /data/dbus-goecharger/install.sh
-/data/dbus-goecharger/install.sh
-rm main.zip
+wget https://github.com/0xFEEDC0DE64/dbus-goecontroller/archive/refs/heads/goecontroller.zip
+unzip goecontroller.zip "dbus-goecontroller-goecontroller/*" -d /data
+mv /data/dbus-goecontroller-goecontroller /data/dbus-goecontroller
+chmod a+x /data/dbus-goecontroller/install.sh
+/data/dbus-goecontroller/install.sh
+rm goecontroller.zip
 ```
 ⚠️ Check configuration after that - because service is already installed an running and with wrong connection data (host) you will spam the log-file
 
 ### Change config.ini
-Within the project there is a file `/data/dbus-goecharger/config.ini` - just change the values - most important is the deviceinstance under "DEFAULT" and host in section "ONPREMISE". More details below:
+Within the project there is a file `/data/dbus-goecontroller/config.ini` - just change the values - most important is the deviceinstance under "DEFAULT" and host in section "ONPREMISE". More details below:
 
 | Section  | Config vlaue | Explanation |
 | ------------- | ------------- | ------------- |
@@ -70,7 +70,7 @@ Within the project there is a file `/data/dbus-goecharger/config.ini` - just cha
 
 
 ## Usefull links
-- https://github.com/goecharger/go-eCharger-API-v1
+- https://github.com/goecharger/go-eController-API
 - https://github.com/victronenergy/dbus_modbustcp/blob/master/CCGX-Modbus-TCP-register-list.xlsx
 - https://github.com/trixing/venus.dbus-twc3
 

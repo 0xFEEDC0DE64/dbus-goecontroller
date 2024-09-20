@@ -20,11 +20,10 @@ sys.path.insert(1, os.path.join(os.path.dirname(__file__), '/opt/victronenergy/d
 from vedbus import VeDbusService
 
 
-class DbusGoeChargerService:
-  def __init__(self, servicename, paths, productname='go-eCharger', connection='go-eCharger HTTP JSON service'):
+class DbusGoeControllerService:
+  def __init__(self, servicename, paths, productname='go-eController', connection='go-eController HTTP JSON service'):
     config = self._getConfig()
     deviceinstance = int(config['DEFAULT']['Deviceinstance'])
-    hardwareVersion = int(config['DEFAULT']['HardwareVersion'])
 
     self._dbusservice = VeDbusService("{}.http_{:02d}".format(servicename, deviceinstance))
     self._paths = paths
@@ -36,8 +35,8 @@ class DbusGoeChargerService:
       '/Mode'
     ]
     
-    #get data from go-eCharger
-    data = self._getGoeChargerData()
+    #get data from go-eController
+    data = self._getGoeControllerData()
 
     # Create the management objects, as specified in the ccgx dbus-api document
     self._dbusservice.add_path('/Mgmt/ProcessName', __file__)
@@ -57,7 +56,6 @@ class DbusGoeChargerService:
            pass
        self._dbusservice.add_path('/FirmwareVersion', fwv)
        self._dbusservice.add_path('/Serial', data['sse'])
-    self._dbusservice.add_path('/HardwareVersion', hardwareVersion)
     self._dbusservice.add_path('/Connected', 1)
     self._dbusservice.add_path('/UpdateIndex', 0)
     
@@ -98,35 +96,35 @@ class DbusGoeChargerService:
     return int(value)
   
   
-  def _getGoeChargerStatusUrl(self):
+  def _getGoeControllerStatusUrl(self):
     config = self._getConfig()
     accessType = config['DEFAULT']['AccessType']
     
     if accessType == 'OnPremise': 
-        URL = "http://%s/status" % (config['ONPREMISE']['Host'])
+        URL = "http://%s/api/status" % (config['ONPREMISE']['Host'])
     else:
         raise ValueError("AccessType %s is not supported" % (config['DEFAULT']['AccessType']))
     
     return URL
   
-  def _getGoeChargerMqttPayloadUrl(self, parameter, value):
+  def _getGoeControllerSetUrl(self, parameter, value):
     config = self._getConfig()
     accessType = config['DEFAULT']['AccessType']
     
     if accessType == 'OnPremise': 
-        URL = "http://%s/mqtt?payload=%s=%s" % (config['ONPREMISE']['Host'], parameter, value)
+        URL = "http://%s/api/set?%s=%s" % (config['ONPREMISE']['Host'], parameter, value)
     else:
         raise ValueError("AccessType %s is not supported" % (config['DEFAULT']['AccessType']))
     
     return URL
   
-  def _setGoeChargerValue(self, parameter, value):
-    URL = self._getGoeChargerMqttPayloadUrl(parameter, str(value))
+  def _setGoeControllerValue(self, parameter, value):
+    URL = self._getGoeControllerSetUrl(parameter, str(value))
     request_data = requests.get(url = URL)
     
     # check for response
     if not request_data:
-      raise ConnectionError("No response from go-eCharger - %s" % (URL))
+      raise ConnectionError("No response from go-eController - %s" % (URL))
     
     json_data = request_data.json()
     
@@ -137,12 +135,12 @@ class DbusGoeChargerService:
     if json_data[parameter] == str(value):
       return True
     else:
-      logging.warning("go-eCharger parameter %s not set to %s" % (parameter, str(value)))
+      logging.warning("go-eController parameter %s not set to %s" % (parameter, str(value)))
       return False
     
  
-  def _getGoeChargerData(self):
-    URL = self._getGoeChargerStatusUrl()
+  def _getGoeControllerData(self):
+    URL = self._getGoeControllerStatusUrl()
     try:
        request_data = requests.get(url = URL, timeout=5)
     except Exception:
@@ -150,7 +148,7 @@ class DbusGoeChargerService:
     
     # check for response
     if not request_data:
-        raise ConnectionError("No response from go-eCharger - %s" % (URL))
+        raise ConnectionError("No response from go-eController - %s" % (URL))
     
     json_data = request_data.json()     
     
@@ -171,8 +169,8 @@ class DbusGoeChargerService:
  
   def _update(self):   
     try:
-       #get data from go-eCharger
-       data = self._getGoeChargerData()
+       #get data from go-eController
+       data = self._getGoeControllerData()
        
        if data is not None:
           #send data to DBus
@@ -199,11 +197,7 @@ class DbusGoeChargerService:
           self._dbusservice['/Mode'] = 0  # Manual, no control
           
           config = self._getConfig()
-          hardwareVersion = int(config['DEFAULT']['HardwareVersion'])
-          if hardwareVersion == 3:
-            self._dbusservice['/MCU/Temperature'] = int(data['tma'][0])
-          else:
-            self._dbusservice['/MCU/Temperature'] = int(data['tmp'])
+          self._dbusservice['/MCU/Temperature'] = int(data['tma'][0])
 
           # value 'car' 1: charging station ready, no vehicle 2: vehicle loads 3: Waiting for vehicle 4: Charge finished, vehicle still connected
           status = 0
@@ -243,11 +237,11 @@ class DbusGoeChargerService:
     logging.info("someone else updated %s to %s" % (path, value))
     
     if path == '/SetCurrent':
-      return self._setGoeChargerValue('amp', value)
+      return self._setGoeControllerValue('amp', value)
     elif path == '/StartStop':
-      return self._setGoeChargerValue('alw', value)
+      return self._setGoeControllerValue('alw', value)
     elif path == '/MaxCurrent':
-      return self._setGoeChargerValue('ama', value)
+      return self._setGoeControllerValue('ama', value)
     else:
       logging.info("mapping for evcharger path %s does not exist" % (path))
       return False
@@ -279,7 +273,7 @@ def main():
       _s = lambda p, v: (str(v) + 's')
      
       #start our main-service
-      pvac_output = DbusGoeChargerService(
+      pvac_output = DbusGoeControllerService(
         servicename='com.victronenergy.evcharger',
         paths={
           '/Ac/Power': {'initial': 0, 'textformat': _w},
@@ -300,7 +294,7 @@ def main():
      
       logging.info('Connected to dbus, and switching over to gobject.MainLoop() (= event based)')
       mainloop = gobject.MainLoop()
-      mainloop.run()            
+      mainloop.run()
   except Exception as e:
     logging.critical('Error at %s', 'main', exc_info=e)
 if __name__ == "__main__":
